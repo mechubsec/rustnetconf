@@ -2,6 +2,21 @@
 #
 # CI runs `cargo deny check bans sources licenses` (.github/workflows/security.yml).
 # Advisories are covered separately by `cargo audit` in the same workflow.
+#
+# Accepted prerelease (issue #64)
+# -------------------------------
+# russh exact-pins `ssh-key =0.7.0-rc.11`. That is still the newest ssh-key
+# on crates.io (max stable is 0.6.7). argon2 0.6.0 and blake2 0.11.0 are
+# already stable; they arrive through ssh-key and are not prerelease.
+# cargo-deny has no "deny prereleases except X" check, so CI also runs
+# `.github/scripts/check-lockfile-prereleases.py` in security.yml. That
+# allowlists ssh-key 0.7.0-rc.* and fails if any other Cargo prerelease
+# appears in a committed Cargo.lock.
+#
+# Exit condition: ssh-key 0.7.0 stable **and** a russh release that depends
+# on it (russh 0.63.x and 0.64.x still exact-pin the RC). Then delete this
+# note, remove the allowlist in the guard, and close #64. Do not watch
+# russh releases for this; a russh bump does not drop the pin.
 
 [graph]
 all-features = true
