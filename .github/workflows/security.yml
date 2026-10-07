@@ -19,6 +19,11 @@ jobs:
   secrets:
     uses: mechubsec/.github/.github/workflows/gitleaks.yml@fb1a159c596bf2c57b9f6f1ff99f546463a6a84a
 
+  # Pinned to mechubsec/.github#10 pending Bedivere's confirmation of the
+  # mechub-version marker convention; bump to a main sha once merged.
+  readme-version:
+    uses: mechubsec/.github/.github/workflows/readme-version.yml@c6a2dccc8dd2d92e58b5a00ba170fb96cb6f97d8
+
   cargo:
     name: cargo-audit + cargo-deny
     runs-on: ubuntu-latest

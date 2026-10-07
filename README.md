@@ -1,3 +1,5 @@
+<!-- mechub-version: v0.18.1 -->
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mechub-mark.svg">
