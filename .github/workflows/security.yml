@@ -51,3 +51,9 @@ jobs:
           # existed this ran `check bans sources` only, because with no config
           # cargo-deny rejects every license by default.
           command: check bans sources licenses
+      # ssh-key 0.7.0-rc.* is accepted until ssh-key 0.7.0 is stable (#64).
+      # Fail if any other Cargo prerelease appears in a committed lockfile.
+      - name: Guard unexpected Cargo.lock prereleases
+        run: |
+          python3 .github/scripts/check-lockfile-prereleases.py --self-test
+          python3 .github/scripts/check-lockfile-prereleases.py

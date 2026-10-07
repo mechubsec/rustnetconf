@@ -45,7 +45,10 @@ Dependency and license checks, both required to pass in CI (`.github/workflows/s
 ```sh
 cargo audit
 cargo deny check bans sources licenses
+python3 .github/scripts/check-lockfile-prereleases.py
 ```
+
+`check-lockfile-prereleases.py` allowlists the `ssh-key 0.7.0-rc.*` crate that russh still exact-pins (issue #64) and fails if any other Cargo prerelease appears in a committed `Cargo.lock`. Drop the allowlist and close #64 when ssh-key 0.7.0 is stable and russh depends on it.
 
 ### Integration tests
 
