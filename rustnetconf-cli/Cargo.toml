@@ -2,6 +2,7 @@
 name = "rustnetconf-cli"
 version = "0.5.0"
 edition = "2021"
+rust-version = "1.89"
 authors = ["fastrevmd-lab"]
 description = "Terraform-like CLI for declarative NETCONF network config management"
 license = "MIT"
