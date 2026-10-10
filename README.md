@@ -135,7 +135,12 @@ key_file = "~/.ssh/id_ed25519"
 
 # Pin the device's SSH host key (recommended; omitting both this and
 # known_hosts_path fails closed unless --insecure-accept-host-key is
-# passed). Get the fingerprint with:
+# passed). Get the fingerprint from a trusted out-of-band source —
+# device console, vendor-shipped admin records, or a secure asset
+# database — not from ssh-keyscan: it is unauthenticated, so on an
+# untrusted first connection a MITM can hand you its own key instead
+# of the device's. If you do run ssh-keyscan as a convenience, treat
+# its output as unverified and confirm it out-of-band before pinning:
 #   ssh-keyscan -p 830 10.0.0.1 | ssh-keygen -lf -
 host_key_fingerprint = "SHA256:..."
 ```
