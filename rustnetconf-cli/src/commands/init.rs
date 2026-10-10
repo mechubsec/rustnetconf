@@ -46,8 +46,14 @@ confirm_timeout = 60
 # The SSH host key must be pinned before connecting (fail-closed by
 # default). Pick one of the two options below — setting both is an error:
 #
-# Option A: pin the exact host key fingerprint. Obtain it with:
-#   ssh-keygen -lf <(ssh-keyscan -t ed25519 10.0.0.1 2>/dev/null)
+# Option A: pin the exact host key fingerprint. Read it on the device
+# itself (console or an already-trusted session), not over the network:
+#   Junos: file show /etc/ssh/ssh_host_ed25519_key.pub
+#   then on your workstation: echo '<that line>' | ssh-keygen -lf -
+#
+# ssh-keyscan -p 830 10.0.0.1 | ssh-keygen -lf -  is a lab-only shortcut:
+# it trusts whatever answers on the network, so verify the result out of
+# band before relying on it.
 # host_key_fingerprint = "SHA256:replace-with-real-fingerprint"
 #
 # Option B: verify against a known_hosts file instead:
@@ -120,6 +126,14 @@ mod tests {
         assert!(
             template.contains("ssh-keygen"),
             "template should say how to obtain the fingerprint"
+        );
+        assert!(
+            template.contains("-p 830"),
+            "any ssh-keyscan suggestion must target the NETCONF port, not default SSH"
+        );
+        assert!(
+            !template.contains("<("),
+            "template must not rely on bash-only process substitution"
         );
 
         // Fresh template has no uncommented [devices.*] section, so loading
