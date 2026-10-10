@@ -101,21 +101,13 @@ pub struct DeviceEntry {
 impl Inventory {
     /// Load inventory from a TOML file.
     pub fn load(path: &Path) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            format!(
-                "failed to read {}: {e} (run `netconf init` first)",
-                path.display()
-            )
-        })?;
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
         let inventory: Inventory = toml::from_str(&content)
             .map_err(|e| format!("failed to parse {}: {e}", path.display()))?;
 
         if inventory.devices.is_empty() {
-            return Err(format!(
-                "{} contains no devices — add a [devices.<name>] section \
-                 (run `netconf init` first if you haven't)",
-                path.display()
-            ));
+            return Err(format!("{} contains no devices", path.display()));
         }
 
         Ok(inventory)

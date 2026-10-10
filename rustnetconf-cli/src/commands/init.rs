@@ -26,11 +26,6 @@ confirm_timeout = 60
 # username = "admin"
 # key_file = "~/.ssh/id_ed25519"
 # vendor = "junos"  # optional, auto-detected
-# # Pin the device's SSH host key (recommended). Get the fingerprint
-# # from a trusted out-of-band source (device console, admin records) —
-# # `ssh-keyscan` is unauthenticated and a MITM on first contact can
-# # hand you its own key instead of the device's.
-# host_key_fingerprint = "SHA256:..."
 
 # [devices.spine-02]
 # host = "10.0.0.2:830"
