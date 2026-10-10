@@ -107,7 +107,11 @@ impl Inventory {
             .map_err(|e| format!("failed to parse {}: {e}", path.display()))?;
 
         if inventory.devices.is_empty() {
-            return Err(format!("{} contains no devices", path.display()));
+            return Err(format!(
+                "{} contains no devices — add a [devices.<name>] section \
+                 (run `netconf init` for a commented template to start from)",
+                path.display()
+            ));
         }
 
         Ok(inventory)
@@ -272,6 +276,36 @@ password = "hunter2-do-not-leak"
         assert_eq!(debug, "SecretString(***)");
         // Sanity: expose() still returns the plaintext for actual use.
         assert_eq!(secret.expose(), "super-secret");
+    }
+
+    /// An inventory.toml with no uncommented `[devices.*]` sections (e.g.
+    /// straight out of `netconf init`) should point the user back at `init`
+    /// instead of just stating the file is empty.
+    #[test]
+    fn empty_devices_error_hints_at_init() {
+        let toml = r#"
+[defaults]
+confirm_timeout = 60
+"#;
+        let inv: Inventory = toml::from_str(toml).unwrap();
+        assert!(inv.devices.is_empty());
+
+        let dir = std::env::temp_dir().join(format!(
+            "rustnetconf-empty-inventory-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("inventory.toml");
+        std::fs::write(&path, toml).unwrap();
+
+        let err = Inventory::load(&path).unwrap_err();
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert!(err.contains("contains no devices"), "got: {err}");
+        assert!(
+            err.contains("netconf init"),
+            "error should hint at `netconf init`: {err}"
+        );
     }
 
     #[test]
