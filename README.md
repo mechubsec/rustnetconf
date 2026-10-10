@@ -106,6 +106,11 @@ netconf validate spine-01       # Dry-run validation
 
 ### Project Structure
 
+`netconf init` creates `inventory.toml` (devices commented out), an empty
+`desired/` directory, and `.netconf/state/`. You add the per-device
+subdirectory and XML files yourself, matching the device names you
+uncomment in `inventory.toml`:
+
 ```
 my-network/
 ├── inventory.toml              # Device connection details
@@ -127,6 +132,12 @@ host = "10.0.0.1:830"
 username = "admin"
 key_file = "~/.ssh/id_ed25519"
 # vendor auto-detected from device hello
+
+# Pin the device's SSH host key (recommended; omitting both this and
+# known_hosts_path fails closed unless --insecure-accept-host-key is
+# passed). Get the fingerprint with:
+#   ssh-keyscan -p 830 10.0.0.1 | ssh-keygen -lf -
+host_key_fingerprint = "SHA256:..."
 ```
 
 **Secrets:** `inventory.toml` may contain plaintext passwords. Prefer
@@ -134,6 +145,15 @@ key_file = "~/.ssh/id_ed25519"
 passwords, protect the file with `chmod 600 inventory.toml` and add it
 to `.gitignore`. Passwords are stored in zeroizing memory and redacted
 from `Debug` output, but the on-disk file itself is plaintext.
+
+### Trying it without a device
+
+The CLI (`plan`/`apply`/`get`/`validate`/`confirm`/`rollback`) always talks
+to a real NETCONF-capable device over SSH or TLS — there is no bundled
+demo device or offline mode. `netconf validate` is the closest thing to a
+dry run: it still connects and locks the candidate datastore, but never
+commits. To try the tool, point it at a lab device (a Juniper vSRX works
+well) or any NETCONF 1.0/1.1 target you control.
 
 ## Library — Quick Start
 

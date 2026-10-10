@@ -26,6 +26,9 @@ confirm_timeout = 60
 # username = "admin"
 # key_file = "~/.ssh/id_ed25519"
 # vendor = "junos"  # optional, auto-detected
+# # Pin the device's SSH host key (recommended). Get it with:
+# #   ssh-keyscan -p 830 10.0.0.1 | ssh-keygen -lf -
+# host_key_fingerprint = "SHA256:..."
 
 # [devices.spine-02]
 # host = "10.0.0.2:830"
