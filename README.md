@@ -106,10 +106,10 @@ netconf validate spine-01       # Dry-run validation
 
 ### Project Structure
 
-`netconf init` creates `inventory.toml` (devices commented out), an empty
-`desired/` directory, and `.netconf/state/`. You add the per-device
-subdirectory and XML files yourself, matching the device names you
-uncomment in `inventory.toml`:
+`netconf init` creates `inventory.toml` (devices commented out),
+`desired/example/interfaces.xml` as a starter config, and `.netconf/state/`.
+Rename or replace `desired/example/` with a subdirectory matching each
+device name you uncomment in `inventory.toml`, and add your own XML files:
 
 ```
 my-network/
