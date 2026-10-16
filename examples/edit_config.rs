@@ -82,12 +82,7 @@ async fn main() {
     };
 
     if let Some(caps) = client.capabilities() {
-        eprintln!(
-            "Connected (session-id: {})",
-            caps.session_id()
-                .map(|id| id.to_string())
-                .unwrap_or_else(|| "unknown".into()),
-        );
+        eprintln!("Connected ({} capabilities)", caps.all_uris().len());
     }
 
     // Check candidate support
