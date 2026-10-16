@@ -254,14 +254,14 @@ password = "hunter2-do-not-leak"
         let inventory_debug = format!("{inv:?}");
         assert!(
             !inventory_debug.contains("hunter2-do-not-leak"),
-            "password leaked through Inventory Debug: {inventory_debug}"
+            "password leaked through Inventory Debug"
         );
 
         let dev = inv.device("router-01").unwrap();
         let device_debug = format!("{dev:?}");
         assert!(
             !device_debug.contains("hunter2-do-not-leak"),
-            "password leaked through ResolvedDevice Debug: {device_debug}"
+            "password leaked through ResolvedDevice Debug"
         );
 
         // Sanity: the redacted marker is present so we know Debug actually
