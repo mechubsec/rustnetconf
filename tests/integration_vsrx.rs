@@ -111,6 +111,11 @@ async fn test_connection_refused() {
     }
 }
 
+/// Runtime-generated, never-valid password for negative-path tests.
+fn throwaway_password() -> String {
+    format!("invalid-{}", std::process::id())
+}
+
 /// T39: Auth failure — wrong credentials should fail with TransportError::Auth.
 #[tokio::test]
 async fn test_auth_failure() {
@@ -122,7 +127,7 @@ async fn test_auth_failure() {
     // default RejectAll would mask the auth error path we're testing.
     let result = Client::connect(target.endpoint())
         .username(&target.username)
-        .password("definitely-wrong-password")
+        .password(&throwaway_password())
         .host_key_verification(HostKeyVerification::AcceptAll)
         .connect()
         .await;
@@ -154,7 +159,7 @@ async fn test_connection_unreachable_host() {
         std::time::Duration::from_secs(5),
         Client::connect("192.0.2.1:830")
             .username("test")
-            .password("test")
+            .password(&throwaway_password())
             .connect(),
     )
     .await;
@@ -622,7 +627,7 @@ async fn test_capabilities_all_uris() {
         assert!(!uri.is_empty(), "capability URI should not be empty");
         assert!(
             uri.starts_with("urn:") || uri.starts_with("http"),
-            "capability URI should start with urn: or http, got: {uri}"
+            "capability URI should start with urn: or http"
         );
     }
 }
