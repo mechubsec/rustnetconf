@@ -22,7 +22,7 @@ categories = ["network-programming"]
 
 [features]
 default = []
-tls = ["rustls", "tokio-rustls", "webpki-roots"]
+tls = ["rustls", "tokio-rustls", "webpki-roots", "rustls-webpki"]
 # Validate outbound XML fragments by attempting a *conforming* parse, instead of
 # by the hand-written rule list in `validate_xml_fragment`. Off by default: it
 # costs one small pure-Rust dependency, and #77 is actively trying to shrink the
@@ -57,7 +57,11 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
     "tls12",
     "aws_lc_rs",
 ] }
-webpki-roots = { version = "0.26", optional = true }
+webpki-roots = { version = "1.0.10", optional = true }
+# Not used directly: a version floor only. rustls 0.23 accepts any 0.103.x
+# verifier, and our Cargo.lock does not bind consumers, so this keeps
+# RUSTSEC-2026-0382 (distrusted intermediates accepted) out of their builds.
+rustls-webpki = { version = "0.103.16", optional = true, default-features = false }
 roxmltree = { version = "0.20", optional = true }
 
 [dev-dependencies]
