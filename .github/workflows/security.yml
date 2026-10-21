@@ -19,10 +19,11 @@ jobs:
   secrets:
     uses: mechubsec/.github/.github/workflows/gitleaks.yml@fb1a159c596bf2c57b9f6f1ff99f546463a6a84a
 
-  # Pinned to mechubsec/.github#10 pending Bedivere's confirmation of the
-  # mechub-version marker convention; bump to a main sha once merged.
+  # Pinned to the mechubsec/.github#10 merge commit on main. The old pin was a
+  # commit on #10's branch; once that branch was deleted Actions could no
+  # longer resolve it and every run of this workflow failed at startup.
   readme-version:
-    uses: mechubsec/.github/.github/workflows/readme-version.yml@c6a2dccc8dd2d92e58b5a00ba170fb96cb6f97d8
+    uses: mechubsec/.github/.github/workflows/readme-version.yml@ce2b282ca4f47da786bcc4c9464026c6cbc55550
 
   cargo:
     name: cargo-audit + cargo-deny
