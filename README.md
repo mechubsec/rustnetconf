@@ -162,7 +162,8 @@ but never commits.
 
 `get` and `plan` only read the running datastore, so any NETCONF 1.0/1.1
 target works for them. `validate`, `apply` and `rollback` also need the
-`:candidate` and `:validate` capabilities, and `apply`/`confirm` need
+`:candidate` and `:validate:1.0` capabilities (a device advertising only
+`:validate:1.1` is currently rejected), and `apply`/`confirm` need
 `:confirmed-commit`. To try the full workflow, point it at a lab device
 that advertises all three (a Juniper vSRX works well).
 
