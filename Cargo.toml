@@ -10,7 +10,7 @@ unsafe_code = "forbid"
 
 [package]
 name = "rustnetconf"
-version = "0.18.1"
+version = "0.18.2"
 edition = "2021"
 rust-version = "1.89"
 authors = ["fastrevmd-lab"]
@@ -39,7 +39,7 @@ thiserror = "2"
 tracing = "0.1"
 async-trait = "0.1"
 zeroize = { version = "1", features = ["derive"] }
-rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+rustls = { version = "0.23.46", optional = true, default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
 # `default-features = false` and the features named explicitly, because
 # Both TLS lines name `aws_lc_rs` deliberately, and both must keep naming the
 # same provider: tokio-rustls 0.26's own default set forwards to

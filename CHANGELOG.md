@@ -2,6 +2,36 @@
 
 Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See the [README](README.md) for current usage.
 
+## What's New in v0.18.2
+
+**Security: dependency floors raised so consumers pick up the fixes, not just our lockfile** (#137, #138).
+
+A crate's `Cargo.lock` does not bind its dependents, so a lockfile-only bump leaves every downstream build free to keep resolving the vulnerable version. This release raises the manifest requirements themselves:
+
+| Dependency | Requirement | Advisories |
+|---|---|---|
+| `russh` | `>=0.63.2, <0.64` → `>=0.64.1, <0.65` | GHSA-4wc5-f2rc-q74m, GHSA-j7h2-66j4-ghjf |
+| `rustls` (`tls` feature) | `0.23` → `0.23.46` | RUSTSEC-2026-0346, -0347, -0348, -0349 (fixed in our lockfile by #135) |
+| `rustls-webpki` (`tls` feature, new floor-only dependency) | `>=0.103.16` | RUSTSEC-2026-0382 |
+| `webpki-roots` (`tls` feature) | `0.26` → `1.0.10` | RUSTSEC-2026-0381 |
+
+Both russh advisories are in russh's server side (agent-protocol server memory use, publickey signature-algorithm check), which this client-only crate does not use. The only breaking change in russh 0.64 is the removed `legacy-ed25519-pkcs8-parser` feature, which we never enabled. `webpki-roots` 0.26.x was a shim re-exporting 1.x, so depending on 1.x directly drops a crate from the graph. No public API change.
+
+### Also in this release
+
+- **`Session::validate` accepts `:validate:1.1`** (#141). It previously required the `:validate:1.0` URI, so a device advertising only `:validate:1.1` (RFC 6241) failed with `CapabilityMissing` even though `Capabilities::has_validate` accepted either — breaking the CLI's `validate`, `apply` and `rollback` against such targets.
+- **CI:** the `security` workflow's `readme-version` job was pinned to a commit on a deleted branch and failed at startup on every PR; repinned (#138). The CI token is least-privilege (#134).
+- **Docs:** declared MSRV 1.89, added an Install section, moved release notes into this file (#130), and documented host-key pinning and what the CLI needs from a device (#131).
+
+### `rustnetconf-cli` 0.5.1
+
+- **`netconf init` matches the documented layout** (#132): it scaffolds `desired/example/interfaces.xml`, the `inventory.toml` template gains a commented `host_key_fingerprint` example with guidance to verify it out-of-band, and an empty inventory's error points at `netconf init`.
+- Requires `rustnetconf` 0.18.2. `cargo install --locked rustnetconf-cli` installs from the packaged lockfile, so this release is what delivers the fixed russh, rustls and webpki to installed binaries.
+
+### `rustnetconf-yang`
+
+Stays at 0.5.0 — no code change of its own. Its `rustnetconf` requirement moves to `0.18.2` in the repo.
+
 ## What's New in v0.18.1
 
 **Security: russh bumped to `>=0.63.2, <0.64`** (#121, CVE-2026-102823).
