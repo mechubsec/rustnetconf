@@ -1750,6 +1750,7 @@ dependencies = [
  "roxmltree",
  "russh",
  "rustls",
+ "rustls-webpki",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
