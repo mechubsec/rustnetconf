@@ -1620,9 +1620,17 @@ impl Session {
 
     /// Validate a datastore configuration.
     ///
-    /// Requires the `:validate` capability.
+    /// Requires the `:validate` capability, version 1.0 or 1.1.
     pub async fn validate(&mut self, source: Datastore) -> Result<(), NetconfError> {
-        self.require_capability(crate::capability::uri::VALIDATE, "validate")?;
+        // Check for either 1.0 or 1.1 validate capability
+        if !self.supports(crate::capability::uri::VALIDATE)
+            && !self.supports(crate::capability::uri::VALIDATE_1_1)
+        {
+            return Err(ProtocolError::CapabilityMissing(
+                "validate requires :validate capability".to_string(),
+            )
+            .into());
+        }
         let msg_id = self.next_message_id();
         let xml = operations::validate_xml(&msg_id, source);
         self.send_rpc(&xml, &msg_id).await?;
@@ -2688,6 +2696,58 @@ mod tests {
             "confirmed_commit should fail without capability"
         );
         let err_str = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_str.contains("CapabilityMissing"),
+            "expected CapabilityMissing, got: {err_str}"
+        );
+    }
+
+    /// Build a mock device hello advertising the given `:validate` version.
+    fn mock_device_hello_with_validate(version: &str) -> Vec<u8> {
+        let hello = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<hello xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+  <capabilities>
+    <capability>urn:ietf:params:netconf:base:1.0</capability>
+    <capability>urn:ietf:params:netconf:capability:candidate:1.0</capability>
+    <capability>urn:ietf:params:netconf:capability:validate:{version}</capability>
+  </capabilities>
+  <session-id>1</session-id>
+</hello>"#
+        );
+        let mut buf = hello.into_bytes();
+        buf.extend_from_slice(b"]]>]]>");
+        buf
+    }
+
+    #[tokio::test]
+    async fn test_validate_accepts_validate_1_0_and_1_1() {
+        for version in ["1.0", "1.1"] {
+            let mut response_data = mock_device_hello_with_validate(version);
+            response_data.extend_from_slice(&mock_ok_reply("1")); // validate
+
+            let transport = MockTransport::new(response_data);
+            let mut session = Session::new(Box::new(transport));
+            session.establish().await.expect("establish failed");
+
+            session
+                .validate(Datastore::Candidate)
+                .await
+                .unwrap_or_else(|err| panic!("validate failed with :validate:{version}: {err:?}"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_requires_capability() {
+        // Hello WITHOUT any :validate capability
+        let response_data = mock_device_hello();
+
+        let transport = MockTransport::new(response_data);
+        let mut session = Session::new(Box::new(transport));
+        session.establish().await.expect("establish failed");
+
+        let result = session.validate(Datastore::Candidate).await;
+        let err_str = format!("{:?}", result.expect_err("validate should fail"));
         assert!(
             err_str.contains("CapabilityMissing"),
             "expected CapabilityMissing, got: {err_str}"
