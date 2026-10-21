@@ -154,11 +154,17 @@ from `Debug` output, but the on-disk file itself is plaintext.
 ### Trying it without a device
 
 The CLI (`plan`/`apply`/`get`/`validate`/`confirm`/`rollback`) always talks
-to a real NETCONF-capable device over SSH or TLS — there is no bundled
-demo device or offline mode. `netconf validate` is the closest thing to a
-dry run: it still connects and locks the candidate datastore, but never
-commits. To try the tool, point it at a lab device (a Juniper vSRX works
-well) or any NETCONF 1.0/1.1 target you control.
+to a real NETCONF device over SSH — there is no bundled demo device or
+offline mode, and the CLI does not speak NETCONF-over-TLS (TLS is available
+through the library's `tls` feature). `netconf validate` is the closest
+thing to a dry run: it still connects and locks the candidate datastore,
+but never commits.
+
+`get` and `plan` only read the running datastore, so any NETCONF 1.0/1.1
+target works for them. `validate`, `apply` and `rollback` also need the
+`:candidate` and `:validate` capabilities, and `apply`/`confirm` need
+`:confirmed-commit`. To try the full workflow, point it at a lab device
+that advertises all three (a Juniper vSRX works well).
 
 ## Library — Quick Start
 
