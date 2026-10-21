@@ -1,4 +1,4 @@
-<!-- mechub-version: v0.18.1 -->
+<!-- mechub-version: v0.18.2 -->
 
 <p align="center">
   <picture>
@@ -26,9 +26,9 @@ Async NETCONF client library, YANG code generation, vendor profiles, connection 
 
 Built on [tokio](https://tokio.rs), [russh](https://crates.io/crates/russh), and [rustls](https://crates.io/crates/rustls) — pure Rust, no OpenSSL, no libssh2.
 
-> **Latest release — [v0.18.1](https://github.com/mechubsec/rustnetconf/releases/tag/v0.18.1)** (security: russh bumped to fix CVE-2026-102823).
-> On crates.io: `rustnetconf` 0.18.1 · `rustnetconf-cli` 0.5.0 · `rustnetconf-yang` 0.5.0.
-> See [CHANGELOG.md](CHANGELOG.md#whats-new-in-v0181) for release notes.
+> **Latest release — [v0.18.2](https://github.com/mechubsec/rustnetconf/releases/tag/v0.18.2)** (security: russh 0.64.1, rustls/webpki floors; `:validate:1.1` fix).
+> On crates.io: `rustnetconf` 0.18.2 · `rustnetconf-cli` 0.5.1 · `rustnetconf-yang` 0.5.0.
+> See [CHANGELOG.md](CHANGELOG.md#whats-new-in-v0182) for release notes.
 
 ## Install
 
