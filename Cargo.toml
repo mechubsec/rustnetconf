@@ -57,7 +57,7 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
     "tls12",
     "aws_lc_rs",
 ] }
-webpki-roots = { version = "0.26", optional = true }
+webpki-roots = { version = "1", optional = true }
 roxmltree = { version = "0.20", optional = true }
 
 [dev-dependencies]
