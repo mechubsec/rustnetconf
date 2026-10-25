@@ -40,15 +40,53 @@ pub enum NetconfError {
 }
 
 /// Transport layer errors (SSH connection, authentication, I/O).
+///
+/// `#[non_exhaustive]`: new variants may be added in minor releases, so
+/// matches need a wildcard arm.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum TransportError {
-    /// Failed to establish TCP/SSH connection.
+    /// Reaching the device failed: TCP connect refused or timed out, DNS
+    /// failure, or the SSH handshake, `direct-tcpip` or jump-host leg could
+    /// not be completed.
+    ///
+    /// Network-level and potentially transient; retrying (or waiting for the
+    /// device) may succeed. Local setup problems are [`Config`](Self::Config)
+    /// and local credential problems are [`Credentials`](Self::Credentials).
     #[error("connection failed: {0}")]
     Connect(String),
 
-    /// SSH authentication rejected.
+    /// The device (or a jump host) rejected the supplied authentication.
+    ///
+    /// The credentials were loaded and presented, and the remote side said
+    /// no. Failures to load or use local credential material are
+    /// [`Credentials`](Self::Credentials).
+    ///
+    /// Limit: if the session drops after the request is sent but before the
+    /// reply, russh reports it exactly like a rejection, so it lands here
+    /// rather than in [`Connect`](Self::Connect). That errs towards not
+    /// retrying.
     #[error("authentication failed: {0}")]
     Auth(String),
+
+    /// Local configuration or setup that cannot succeed unchanged, for
+    /// example `proxy_command` combined with `jump_hosts`, a `ProxyCommand`
+    /// that cannot be spawned, an unpinnable `known_hosts` host, or an
+    /// unknown device name in a pool.
+    ///
+    /// Not transient: retrying with the same configuration will fail the
+    /// same way. Nothing reached the device.
+    #[error("configuration error: {0}")]
+    Config(String),
+
+    /// Local credential material could not be loaded or used: SSH key file
+    /// unreadable or undecodable, SSH agent unavailable, or a required
+    /// username or authentication method missing.
+    ///
+    /// A local misconfiguration, not a device decision; nothing was
+    /// presented to the device. Contrast [`Auth`](Self::Auth).
+    #[error("credentials error: {0}")]
+    Credentials(String),
 
     /// SSH channel or subsystem error.
     #[error("channel error: {0}")]
@@ -76,9 +114,10 @@ pub enum TransportError {
     Tls(String),
 
     /// Server presented a host key whose fingerprint does not match the one
-    /// recorded in the known_hosts file for this host. Possible MITM attack
-    /// or the device's host key was rotated — investigate before reconnecting.
-    #[error("host key mismatch for {host}: known_hosts has {expected}, server presented {actual}")]
+    /// pinned for this host (a known_hosts entry or an explicit
+    /// `HostKeyVerification::Fingerprint`). Possible MITM attack or the
+    /// device's host key was rotated — investigate before reconnecting.
+    #[error("host key mismatch for {host}: expected {expected}, server presented {actual}")]
     HostKeyMismatch {
         host: String,
         expected: String,

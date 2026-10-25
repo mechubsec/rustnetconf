@@ -133,9 +133,7 @@ impl DevicePool {
     /// Blocks until a semaphore permit is available, up to `checkout_timeout`.
     pub async fn checkout(&self, device_name: &str) -> Result<PoolGuard<'_>, NetconfError> {
         let config = self.devices.get(device_name).ok_or_else(|| {
-            crate::error::TransportError::Connect(format!(
-                "unknown device in pool: '{device_name}'"
-            ))
+            crate::error::TransportError::Config(format!("unknown device in pool: '{device_name}'"))
         })?;
 
         // Acquire semaphore permit with timeout
