@@ -1,6 +1,6 @@
 [package]
 name = "rustnetconf-cli"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 rust-version = "1.89"
 authors = ["fastrevmd-lab"]
@@ -14,7 +14,7 @@ name = "netconf"
 path = "src/main.rs"
 
 [dependencies]
-rustnetconf = { version = "0.18.2", path = ".." }
+rustnetconf = { version = "0.19.0", path = ".." }
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
 serde = { version = "1", features = ["derive"] }

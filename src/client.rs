@@ -287,7 +287,7 @@ impl ClientBuilder {
     /// Establish the SSH connection and perform the NETCONF hello exchange.
     pub async fn connect(self) -> Result<Client, NetconfError> {
         let username = self.username.ok_or_else(|| {
-            crate::error::TransportError::Auth("username is required".to_string())
+            crate::error::TransportError::Credentials("username is required".to_string())
         })?;
 
         let auth = if self.use_agent {
@@ -300,7 +300,7 @@ impl ClientBuilder {
         } else if let Some(password) = self.password {
             SshAuth::Password(password)
         } else {
-            return Err(crate::error::TransportError::Auth(
+            return Err(crate::error::TransportError::Credentials(
                 "no authentication method specified (password, key_file, or ssh_agent)".to_string(),
             )
             .into());
@@ -1452,6 +1452,22 @@ fn default_ssh_config_path() -> Option<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn missing_username_is_credentials_error() {
+        let err = Client::connect("127.0.0.1:1")
+            .connect()
+            .await
+            .err()
+            .unwrap();
+        assert!(
+            matches!(
+                err,
+                NetconfError::Transport(crate::error::TransportError::Credentials(_))
+            ),
+            "got {err:?}"
+        );
+    }
 
     #[test]
     fn test_parse_address_with_port() {

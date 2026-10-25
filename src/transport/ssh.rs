@@ -174,7 +174,7 @@ pub struct SshConfig {
     ///
     /// Mutually exclusive with `jump_hosts`. If both are set,
     /// [`SshTransport::connect`] returns
-    /// [`TransportError::Connect`]. Use one or the other to reach a host.
+    /// [`TransportError::Config`]. Use one or the other to reach a host.
     ///
     /// **Security:** the command is interpreted by `sh -c` to support
     /// pipelines and shell features. The `%h` and `%p` values are
@@ -257,7 +257,7 @@ impl client::Handler for SshHandler {
                 );
                 true
             }
-            HostKeyVerification::Fingerprint(_) => {
+            HostKeyVerification::Fingerprint(expected) => {
                 let ok = evaluate_host_key_policy(&self.host_key_verification, &fingerprint);
                 if ok {
                     tracing::debug!("SSH host key fingerprint verified");
@@ -266,6 +266,13 @@ impl client::Handler for SshHandler {
                         actual = %fingerprint,
                         "SSH host key fingerprint mismatch — possible MITM attack"
                     );
+                    // Typed, so callers never read a security refusal as a
+                    // transient `Connect`.
+                    self.error_slot.set(TransportError::HostKeyMismatch {
+                        host: self.host.clone(),
+                        expected: expected.clone(),
+                        actual: fingerprint.clone(),
+                    });
                 }
                 ok
             }
@@ -276,6 +283,10 @@ impl client::Handler for SshHandler {
                      Pin the device's fingerprint with HostKeyVerification::Fingerprint \
                      or explicitly opt in to HostKeyVerification::AcceptAll for lab use."
                 );
+                self.error_slot.set(TransportError::Config(format!(
+                    "SSH host key rejected by the RejectAll policy (presented {fingerprint}); \
+                     pin it with HostKeyVerification::Fingerprint or KnownHosts"
+                )));
                 false
             }
             HostKeyVerification::KnownHosts(path) => {
@@ -414,7 +425,7 @@ fn evaluate_known_hosts_policy(
         // pattern pinned to whatever key is presented. Fail closed instead
         // of writing it.
         if !crate::transport::known_hosts::is_pinnable_host(host) {
-            return Err(TransportError::Connect(format!(
+            return Err(TransportError::Config(format!(
                 "refusing to pin known_hosts entry: host {host:?} is not a plain hostname or \
                  IP literal"
             )));
@@ -607,19 +618,37 @@ fn spawn_proxy_command(
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| {
-            TransportError::Connect(format!("failed to spawn ProxyCommand `{expanded}`: {e}"))
+            TransportError::Config(format!("failed to spawn ProxyCommand `{expanded}`: {e}"))
         })?;
 
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| TransportError::Connect("ProxyCommand stdin not captured".to_string()))?;
+        .ok_or_else(|| TransportError::Config("ProxyCommand stdin not captured".to_string()))?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| TransportError::Connect("ProxyCommand stdout not captured".to_string()))?;
+        .ok_or_else(|| TransportError::Config("ProxyCommand stdout not captured".to_string()))?;
 
     Ok((ProxyCommandStream { stdin, stdout }, child))
+}
+
+/// Read and decode a private key file. Failures are local
+/// ([`TransportError::Credentials`]), never a device decision.
+async fn load_key_file(
+    path: &str,
+    passphrase: Option<&str>,
+) -> Result<keys::PrivateKey, TransportError> {
+    let key_contents = tokio::fs::read_to_string(Path::new(path))
+        .await
+        .map_err(|e| {
+            tracing::debug!(path, %e, "failed to read key file");
+            TransportError::Credentials("failed to read SSH key file".to_string())
+        })?;
+    keys::decode_secret_key(&key_contents, passphrase).map_err(|e| {
+        tracing::debug!(%e, "failed to decode key");
+        TransportError::Credentials("failed to decode SSH key".to_string())
+    })
 }
 
 /// Authenticate an open SSH session against the given username/auth method.
@@ -634,18 +663,11 @@ async fn authenticate(
         SshAuth::Password(password) => handle
             .authenticate_password(username, password.as_str())
             .await
-            .map_err(|e| TransportError::Auth(format!("password auth failed: {e}")))?,
+            // An Err here is the exchange failing (e.g. the connection
+            // dropped), not the device saying no: that is `Ok(Failure)`.
+            .map_err(|e| TransportError::Connect(format!("password auth exchange failed: {e}")))?,
         SshAuth::KeyFile { path, passphrase } => {
-            let key_path = Path::new(path);
-            let key_contents = tokio::fs::read_to_string(key_path).await.map_err(|e| {
-                tracing::debug!(path, %e, "failed to read key file");
-                TransportError::Auth("failed to read SSH key file".to_string())
-            })?;
-            let passphrase_str = passphrase.as_ref().map(|p| p.as_str());
-            let key_pair = keys::decode_secret_key(&key_contents, passphrase_str).map_err(|e| {
-                tracing::debug!(%e, "failed to decode key");
-                TransportError::Auth("failed to decode SSH key".to_string())
-            })?;
+            let key_pair = load_key_file(path, passphrase.as_ref().map(|p| p.as_str())).await?;
             let hash_alg = handle
                 .best_supported_rsa_hash()
                 .await
@@ -655,18 +677,27 @@ async fn authenticate(
             handle
                 .authenticate_publickey(username, key_with_hash)
                 .await
-                .map_err(|e| TransportError::Auth(format!("key auth failed: {e}")))?
+                .map_err(|e| TransportError::Connect(format!("key auth exchange failed: {e}")))?
         }
         SshAuth::Agent => {
             let mut agent = keys::agent::client::AgentClient::connect_env()
                 .await
-                .map_err(|e| TransportError::Auth(format!("SSH agent connect failed: {e}")))?;
-            let identities = agent
-                .request_identities()
-                .await
-                .map_err(|e| TransportError::Auth(format!("SSH agent identities failed: {e}")))?;
+                .map_err(|e| {
+                    TransportError::Credentials(format!("SSH agent connect failed: {e}"))
+                })?;
+            let identities = agent.request_identities().await.map_err(|e| {
+                TransportError::Credentials(format!("SSH agent identities failed: {e}"))
+            })?;
 
+            if identities.is_empty() {
+                return Err(TransportError::Credentials(
+                    "SSH agent has no identities".to_string(),
+                ));
+            }
             let mut auth_success = false;
+            let mut saw_rejection = false;
+            let mut sign_error = None;
+            let mut last_error = None;
             for identity in identities {
                 match handle
                     .authenticate_publickey_with(
@@ -681,9 +712,17 @@ async fn authenticate(
                         auth_success = true;
                         break;
                     }
-                    _ => continue,
+                    Ok(_) => saw_rejection = true,
+                    // Stop here: russh still awaits this request's signature and
+                    // would ignore the next identity, hanging `connect()`.
+                    Err(russh::AgentAuthError::Key(e)) => {
+                        sign_error = Some(e.to_string());
+                        break;
+                    }
+                    Err(e) => last_error = Some(e.to_string()),
                 }
             }
+            agent_exchange_outcome(auth_success, saw_rejection, sign_error, last_error)?;
             if auth_success {
                 AuthResult::Success
             } else {
@@ -696,11 +735,39 @@ async fn authenticate(
     };
 
     if !matches!(auth_result, AuthResult::Success) {
+        // Also reached when the session drops after the request was sent:
+        // russh returns the same empty `Failure` for that as for a rejection
+        // with no methods left. Reported as `Auth`, the non-retryable side.
         return Err(TransportError::Auth(format!(
             "authentication failed for user '{username}'"
         )));
     }
     Ok(())
+}
+
+/// Classify an agent attempt the device never answered: a local signing
+/// failure (locked agent, smart card) is `Credentials`, a broken exchange is
+/// `Connect`. Once the device rejected an identity, the caller reports `Auth`.
+fn agent_exchange_outcome(
+    success: bool,
+    saw_rejection: bool,
+    sign_error: Option<String>,
+    last_error: Option<String>,
+) -> Result<(), TransportError> {
+    if success || saw_rejection {
+        return Ok(());
+    }
+    if let Some(error) = sign_error {
+        return Err(TransportError::Credentials(format!(
+            "SSH agent signing failed: {error}"
+        )));
+    }
+    match last_error {
+        Some(error) => Err(TransportError::Connect(format!(
+            "agent auth exchange failed: {error}"
+        ))),
+        None => Ok(()),
+    }
 }
 
 impl SshTransport {
@@ -714,10 +781,10 @@ impl SshTransport {
     /// and its stdin/stdout become the transport stream to the target,
     /// equivalent to OpenSSH's `ProxyCommand`. `proxy_command` and
     /// `jump_hosts` are mutually exclusive — setting both returns
-    /// [`TransportError::Connect`].
+    /// [`TransportError::Config`].
     pub async fn connect(config: SshConfig) -> Result<Self, TransportError> {
         if config.proxy_command.is_some() && !config.jump_hosts.is_empty() {
-            return Err(TransportError::Connect(
+            return Err(TransportError::Config(
                 "proxy_command and jump_hosts are mutually exclusive — \
                  use one or the other to reach the target"
                     .to_string(),
@@ -795,6 +862,14 @@ impl SshTransport {
                 .await
                 .map_err(|e| match e {
                     TransportError::Auth(msg) => TransportError::Auth(format!(
+                        "jump-host {} ({}:{}): {msg}",
+                        idx, hop.host, hop.port
+                    )),
+                    TransportError::Credentials(msg) => TransportError::Credentials(format!(
+                        "jump-host {} ({}:{}): {msg}",
+                        idx, hop.host, hop.port
+                    )),
+                    TransportError::Connect(msg) => TransportError::Connect(format!(
                         "jump-host {} ({}:{}): {msg}",
                         idx, hop.host, hop.port
                     )),
@@ -992,6 +1067,59 @@ impl Transport for SshTransport {
 
 #[cfg(test)]
 mod tests {
+    /// Run the real host-key callback and return what it left in the slot.
+    async fn host_key_refusal(policy: HostKeyVerification) -> Option<TransportError> {
+        use client::Handler as _;
+        let key =
+            keys::PrivateKey::random(&mut keys::key::safe_rng(), keys::Algorithm::Ed25519).unwrap();
+        let slot = HostKeyErrorSlot::default();
+        let mut handler = SshHandler {
+            host_key_verification: policy,
+            host: "device-a.lab".into(),
+            port: 830,
+            error_slot: slot.clone(),
+        };
+        let presented = keys::PublicKeyOrCertificate::PublicKey {
+            key: key.public_key().clone(),
+            hash_alg: None,
+        };
+        assert!(!handler.check_server_key(&presented).await.unwrap());
+        slot.take()
+    }
+
+    #[tokio::test]
+    async fn host_key_policy_refusals_are_typed_not_connect() {
+        let reject_all = host_key_refusal(HostKeyVerification::RejectAll).await;
+        assert!(
+            matches!(reject_all, Some(TransportError::Config(_))),
+            "{reject_all:?}"
+        );
+        let mismatch =
+            host_key_refusal(HostKeyVerification::Fingerprint("SHA256:not-it".into())).await;
+        assert!(
+            matches!(&mismatch, Some(TransportError::HostKeyMismatch { expected, .. }) if expected == "SHA256:not-it"),
+            "{mismatch:?}"
+        );
+    }
+
+    #[test]
+    fn agent_exchange_errors_without_a_rejection_are_connect_failures() {
+        let broken = agent_exchange_outcome(false, false, None, Some("disconnected".into()));
+        assert!(
+            matches!(broken, Err(TransportError::Connect(_))),
+            "{broken:?}"
+        );
+        let locked = agent_exchange_outcome(false, false, Some("locked".into()), Some("x".into()));
+        assert!(
+            matches!(locked, Err(TransportError::Credentials(_))),
+            "{locked:?}"
+        );
+        // The device answered at least once: leave it to the Auth rejection.
+        assert!(agent_exchange_outcome(false, true, Some("x".into()), Some("x".into())).is_ok());
+        assert!(agent_exchange_outcome(true, false, None, Some("x".into())).is_ok());
+        assert!(agent_exchange_outcome(false, false, None, None).is_ok());
+    }
+
     use super::*;
 
     #[test]
@@ -1150,10 +1278,10 @@ mod tests {
             Ok(_) => panic!("expected connect to fail"),
         };
         match err {
-            TransportError::Connect(msg) => {
+            TransportError::Config(msg) => {
                 assert!(msg.contains("mutually exclusive"), "unexpected msg: {msg}");
             }
-            other => panic!("expected Connect, got {other:?}"),
+            other => panic!("expected Config, got {other:?}"),
         }
     }
 
@@ -1173,6 +1301,49 @@ mod tests {
             // `false` exits 1 immediately, so stdin/stdout EOF and the SSH
             // handshake errors out — proves the proxy branch is wired.
             proxy_command: Some("false".to_string()),
+        };
+        let err = match SshTransport::connect(cfg).await {
+            Err(e) => e,
+            Ok(_) => panic!("expected connect to fail"),
+        };
+        assert!(matches!(err, TransportError::Connect(_)), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn unreadable_key_file_is_credentials_error() {
+        let err = load_key_file("/nonexistent/rustnetconf-test-key", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, TransportError::Credentials(_)), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn undecodable_key_file_is_credentials_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("key");
+        std::fs::write(&path, "not a key").unwrap();
+        let err = load_key_file(path.to_str().unwrap(), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, TransportError::Credentials(_)), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn connection_refused_is_connect_error() {
+        // Bind then drop to get a port that is closed.
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let cfg = SshConfig {
+            host: "127.0.0.1".to_string(),
+            port,
+            username: "u".to_string(),
+            auth: SshAuth::Password(Zeroizing::new("p".to_string())),
+            host_key_verification: HostKeyVerification::AcceptAll,
+            jump_hosts: Vec::new(),
+            proxy_command: None,
         };
         let err = match SshTransport::connect(cfg).await {
             Err(e) => e,
@@ -1443,8 +1614,8 @@ mod tests {
         let res =
             evaluate_known_hosts_policy(&path, "a.lab\n* ssh-ed25519 AAAA", 22, &key, &fp, true);
         assert!(
-            matches!(res, Err(TransportError::Connect(_))),
-            "expected Connect error for an unpinnable host, got {res:?}"
+            matches!(res, Err(TransportError::Config(_))),
+            "expected Config error for an unpinnable host, got {res:?}"
         );
         assert!(
             !path.exists(),
