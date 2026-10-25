@@ -2,6 +2,58 @@
 
 Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See the [README](README.md) for current usage.
 
+## What's New in v0.19.0
+
+**Breaking: `TransportError` now separates "could not reach the device" from local setup and credential problems.**
+
+Before, `Connect` and `Auth` each covered two unrelated things, so callers could not tell a transient network failure from a permanent local misconfiguration, or a device rejecting credentials from a key file that never loaded. Two variants are new, and the old two now mean one thing each:
+
+| Variant | Meaning |
+|---|---|
+| `Connect` | Reaching the device failed (TCP/DNS, SSH handshake, `direct-tcpip`, jump-host leg, pool checkout timeout). Network-level, potentially transient. |
+| `Auth` | The device (or a jump host) rejected the supplied authentication. |
+| `Config` (new) | Local configuration or setup that cannot succeed unchanged. Not transient; nothing reached the device. |
+| `Credentials` (new) | Local credential material could not be loaded or used. Nothing was presented to the device. |
+
+### Reclassified messages
+
+| Message | Before | After |
+|---|---|---|
+| `proxy_command and jump_hosts are mutually exclusive ...` | `Connect` | `Config` |
+| `failed to spawn ProxyCommand ...` | `Connect` | `Config` |
+| `ProxyCommand stdin not captured` / `stdout not captured` | `Connect` | `Config` |
+| `refusing to pin known_hosts entry ...` | `Connect` | `Config` |
+| `unknown device in pool: ...` | `Connect` | `Config` |
+| `failed to read SSH key file` | `Auth` | `Credentials` |
+| `failed to decode SSH key` | `Auth` | `Credentials` |
+| `SSH agent connect failed` / `SSH agent identities failed` | `Auth` | `Credentials` |
+| `username is required` | `Auth` | `Credentials` |
+| `no authentication method specified ...` | `Auth` | `Credentials` |
+| `password auth exchange failed` / `key auth exchange failed` (the exchange broke, e.g. the connection dropped, before the device answered) | `Auth` | `Connect` |
+| `agent auth exchange failed` (every agent identity errored and none was rejected) | `Auth` | `Connect` |
+| A jump host's `Connect` error | (no hop label) | `Connect`, prefixed `jump-host N (host:port):` like `Auth` |
+| `SSH agent has no identities` | `Auth` | `Credentials` |
+| `SSH agent signing failed` (locked agent, smart card) | `Auth` | `Credentials` |
+| SSH host key refused by the `RejectAll` policy | `Connect` | `Config` |
+| SSH host key does not match the pinned `Fingerprint` | `Connect` | `HostKeyMismatch` (as `KnownHosts` already did) |
+
+Unchanged: TCP and SSH-handshake failures stay `Connect`. With the `tls` feature, the TCP connect is `Connect` and a certificate or TLS-handshake failure is `Tls`, as before. A device's rejection of a password, key or every agent identity stays `Auth`, and so does a session that drops after the auth request was sent (russh reports it identically). Pool checkout timeout and "pool semaphore closed" stay `Connect`.
+
+### `#[non_exhaustive]`
+`TransportError` is now `#[non_exhaustive]`, so adding variants later is not a breaking change. `NetconfError` is unchanged (it has no history of growing, and the crate uses no other `#[non_exhaustive]` types).
+
+### Migrating
+- Exhaustive `match` on `TransportError` needs a wildcard arm (`_ => ...`) and, if you want the new distinction, arms for `Config` and `Credentials`.
+- Code that retried on `Connect` now retries only genuine reachability failures; `Auth` now means only that the device said no, so it and `Credentials` are both non-retryable without a change; an exchange that broke mid-authentication is `Connect`.
+- Matching on `Display` text breaks for every row in the table above: the variant prefix changes (`connection failed:`, `authentication failed:`, and the new `configuration error:` / `credentials error:`), and some messages are new (`password auth exchange failed`, `key auth exchange failed`, `agent auth exchange failed`, `SSH agent has no identities`, `SSH agent signing failed`, the `RejectAll` refusal, and `HostKeyMismatch`'s own text for a `Fingerprint` mismatch). `HostKeyMismatch` itself now reads `expected <fp>` instead of `known_hosts has <fp>`, since the pin may be an explicit fingerprint. Match on the variant instead.
+- An SSH agent signing failure now stops at that identity and returns `Credentials`; before, the next identity's request was sent while russh still awaited the first signature, which could hang `connect()`.
+
+### Security
+
+- **Dependency floors:** `crypto-bigint` 0.7.9 (RUSTSEC-2026-0387; 0.7.0-0.7.8 are yanked), `ctutils` 0.4.5 (RUSTSEC-2026-0385), timing side channels in constant-time code; `tokio` 1.54.1 (RUSTSEC-2026-0386, `AsyncFd` I/O-safety unsoundness). The manifest raises the floors too (`tokio` `1.54.1`, and floor-only `crypto-bigint` `0.7.9` / `ctutils` `0.4.5`, which arrive through russh), so consumers cannot resolve the vulnerable versions, as 0.18.2 did for `rustls-webpki`.
+
+`rustnetconf-cli` 0.5.2 and `rustnetconf-yang` 0.6.0 have no code change of their own; they move their `rustnetconf` requirement to 0.19.0. The yang crate takes a minor bump because its published 0.5.0 requires `rustnetconf ^0.18`, which cannot resolve to 0.19.
+
 ## What's New in v0.18.2
 
 **Security: dependency floors raised so consumers pick up the fixes, not just our lockfile** (#137, #138).

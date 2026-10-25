@@ -1741,7 +1741,7 @@ dependencies = [
 
 [[package]]
 name = "rustnetconf"
-version = "0.18.2"
+version = "0.19.0"
 dependencies = [
  "async-trait",
  "base64ct",
@@ -1766,7 +1766,7 @@ dependencies = [
 
 [[package]]
 name = "rustnetconf-cli"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "clap",
  "console",
@@ -1783,7 +1783,7 @@ dependencies = [
 
 [[package]]
 name = "rustnetconf-yang"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "quick-xml",
  "rustnetconf",
