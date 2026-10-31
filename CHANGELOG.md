@@ -2,6 +2,14 @@
 
 Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See the [README](README.md) for current usage.
 
+## What's New in v0.19.1
+
+**Security: moves to russh 0.65 (`>=0.65, <0.66`).** This picks up CVE-2026-116794 and the other fixes in that release. The ones that reach an SSH client are GHSA-4p9f-7p9m-5vfg, unbounded allocation from repeated `EXT_INFO` packets, and GHSA-fw5c-8223-6h42, a channel stall when a peer declares a zero maximum packet size.
+
+No rustnetconf API change. The russh 0.65 breaking changes are server-side.
+
+`rustnetconf-cli` 0.5.3 ships the updated lockfile, so `cargo install --locked` gets the fix.
+
 ## What's New in v0.19.0
 
 **Breaking: `TransportError` now separates "could not reach the device" from local setup and credential problems.**

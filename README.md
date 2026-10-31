@@ -1,4 +1,4 @@
-<!-- mechub-version: v0.19.0 -->
+<!-- mechub-version: v0.19.1 -->
 
 <p align="center">
   <picture>
@@ -26,9 +26,9 @@ Async NETCONF client library, YANG code generation, vendor profiles, connection 
 
 Built on [tokio](https://tokio.rs), [russh](https://crates.io/crates/russh), and [rustls](https://crates.io/crates/rustls) — pure Rust, no OpenSSL, no libssh2.
 
-> **Latest release — [v0.19.0](https://github.com/mechubsec/rustnetconf/releases/tag/v0.19.0)** (breaking: `TransportError::Config` / `Credentials`, `#[non_exhaustive]`).
-> On crates.io: `rustnetconf` 0.19.0 · `rustnetconf-cli` 0.5.2 · `rustnetconf-yang` 0.6.0.
-> See [CHANGELOG.md](CHANGELOG.md#whats-new-in-v0190) for release notes.
+> **Latest release — [v0.19.1](https://github.com/mechubsec/rustnetconf/releases/tag/v0.19.1)** (2026-10-30): moves to russh 0.65 for its security fixes, including CVE-2026-116794 and client-side `EXT_INFO` and channel-stall fixes. No API change.
+> On crates.io: `rustnetconf` 0.19.1 · `rustnetconf-cli` 0.5.3 · `rustnetconf-yang` 0.6.0.
+> See [CHANGELOG.md](CHANGELOG.md#whats-new-in-v0191) for release notes.
 
 ## Install
 
@@ -637,7 +637,7 @@ To report a security vulnerability, please open an issue on GitHub.
 | `aws-lc-rs` | 1 | SHA-256 fingerprints and HMAC for `known_hosts` |
 | `base64ct` | 1 | Constant-time base64 for key blobs |
 | `quick-xml` | 0.41 | XML parsing (NETCONF RPC encode/decode) |
-| `russh` | 0.62 | SSH transport (pure Rust, no libssh2) |
+| `russh` | 0.65 | SSH transport (pure Rust, no libssh2) |
 | `thiserror` | 2 | Error derive macros |
 | `tokio` | 1 | Async runtime |
 | `tracing` | 0.1 | Structured logging/tracing |
