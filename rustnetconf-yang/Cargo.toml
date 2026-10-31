@@ -27,7 +27,7 @@ regenerate = ["dep:yang2"]
 bundled = ["yang2?/bundled"]
 
 [dependencies]
-rustnetconf = { version = "0.19.0", path = ".." }
+rustnetconf = { version = "0.19.1", path = ".." }
 serde = { version = "1", features = ["derive"] }
 quick-xml = "0.42"
 thiserror = "2"
