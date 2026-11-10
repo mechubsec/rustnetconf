@@ -2,6 +2,16 @@
 
 Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See the [README](README.md) for current usage.
 
+## What's New in v0.19.2
+
+**Fix: the reply parser no longer rejects the extra elements Junos puts inside `<rpc-error>`.**
+
+Any element directly inside `<rpc-error>` other than the six RFC 6241 fields and `<error-info>` failed the whole reply with `RpcError::ParseError`, so the caller never saw the device's actual error or warning. Junos sends such elements in two cases: a flat `<source-daemon>` on every warning and error in non-RFC mode (issue #147), and a nested `<database-status-information>` when a lock is refused because a CLI user has uncommitted edits.
+
+These elements are now kept, in any namespace, with nesting, attributes and namespace declarations. They are appended to `info` in document order, after or between any `<error-info>` content. A warning plus `<ok/>` parses as success with the warning; a refused lock gives `RpcError::ServerError` with the fragment in `info`. Duplicate fields, nested text fields and the other strict checks are unchanged.
+
+No API change.
+
 ## What's New in v0.19.1
 
 **Security: moves to russh 0.65 (`>=0.65, <0.66`).** This picks up CVE-2026-116794 and the other fixes in that release. The ones that reach an SSH client are GHSA-4p9f-7p9m-5vfg, unbounded allocation from repeated `EXT_INFO` packets, and GHSA-fw5c-8223-6h42, a channel stall when a peer declares a zero maximum packet size.

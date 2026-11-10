@@ -102,6 +102,8 @@ struct ErrorState {
     info_capture: Option<FragmentCapture>,
     info_depth: usize,
     info_seen: bool,
+    /// The capture in `info_capture` is an extra element, not `<error-info>`.
+    capture_is_extra: bool,
 }
 
 struct ReplyParser<'a> {
@@ -586,6 +588,7 @@ impl ReplyParser<'_> {
 
     fn error_start(&mut self, tag: &BytesStart<'_>) -> Result<(), RpcError> {
         let namespaces = self.namespaces.clone();
+        let parent_namespaces = self.parent_namespaces();
         let qualified_name = tag.name();
         let name = self.netconf_local_name(qualified_name.as_ref());
         let error = self
@@ -599,12 +602,20 @@ impl ReplyParser<'_> {
             error.info_seen = true;
             error.info_capture = Some(FragmentCapture::with_namespaces(namespaces));
             error.info_depth = 0;
+            error.capture_is_extra = false;
             return Ok(());
         }
 
-        let field = name
-            .and_then(ErrorField::from_name)
-            .ok_or_else(|| parse_error("unknown element directly inside rpc-error"))?;
+        let Some(field) = name.and_then(ErrorField::from_name) else {
+            // Junos adds elements here (`source-daemon`, `database-status-information`).
+            // Keep them, in any namespace, as part of `info`.
+            let mut capture = FragmentCapture::with_namespaces(parent_namespaces);
+            capture.start(tag)?;
+            error.info_capture = Some(capture);
+            error.info_depth = 1;
+            error.capture_is_extra = true;
+            return Ok(());
+        };
         if error.field.is_some() {
             return Err(parse_error("nested rpc-error text fields"));
         }
@@ -614,6 +625,7 @@ impl ReplyParser<'_> {
     }
 
     fn error_empty(&mut self, tag: &BytesStart<'_>) -> Result<(), RpcError> {
+        let parent_namespaces = self.parent_namespaces();
         let qualified_name = tag.name();
         let name = self.netconf_local_name(qualified_name.as_ref());
         let error = self
@@ -625,13 +637,20 @@ impl ReplyParser<'_> {
                 return Err(parse_error("duplicate error-info"));
             }
             error.info_seen = true;
-            error.builder.info = Some(String::new());
+            error.builder.info.get_or_insert_with(String::new);
             return Ok(());
         }
 
-        let field = name
-            .and_then(ErrorField::from_name)
-            .ok_or_else(|| parse_error("unknown element directly inside rpc-error"))?;
+        let Some(field) = name.and_then(ErrorField::from_name) else {
+            let mut capture = FragmentCapture::with_namespaces(parent_namespaces);
+            capture.empty(tag)?;
+            error
+                .builder
+                .info
+                .get_or_insert_with(String::new)
+                .push_str(&capture.finish()?);
+            return Ok(());
+        };
         error.builder.set_field(field, "")
     }
 
@@ -748,6 +767,18 @@ impl ReplyParser<'_> {
                     if error.info_depth > 0 {
                         capture.end(tag)?;
                         error.info_depth -= 1;
+                        if error.info_depth == 0 && error.capture_is_extra {
+                            let extra = error
+                                .info_capture
+                                .take()
+                                .expect("extra capture exists")
+                                .finish()?;
+                            error
+                                .builder
+                                .info
+                                .get_or_insert_with(String::new)
+                                .push_str(&extra);
+                        }
                         return Ok(());
                     }
                     if name != Some("error-info") {
@@ -758,7 +789,11 @@ impl ReplyParser<'_> {
                         .take()
                         .expect("error-info capture exists")
                         .finish()?;
-                    error.builder.info = Some(info);
+                    error
+                        .builder
+                        .info
+                        .get_or_insert_with(String::new)
+                        .push_str(&info);
                     return Ok(());
                 }
 
@@ -1485,25 +1520,30 @@ mod tests {
 
     #[test]
     fn vendor_namespace_rpc_error_fields_are_not_netconf_fields() {
-        let cases = [
-            r#"<rpc-reply xmlns:v="urn:vendor" message-id="1"><rpc-error>
+        // A vendor-namespaced `error-type` is not the NETCONF field, so the
+        // mandatory field is still missing.
+        let xml = r#"<rpc-reply xmlns:v="urn:vendor" message-id="1"><rpc-error>
               <v:error-type>application</v:error-type>
               <error-tag>operation-failed</error-tag>
               <error-severity>error</error-severity>
-            </rpc-error></rpc-reply>"#,
-            r#"<rpc-reply xmlns:v="urn:vendor" message-id="1"><rpc-error>
+            </rpc-error></rpc-reply>"#;
+        assert!(matches!(
+            parse_strict(xml, "1"),
+            Err(RpcError::ParseError(_))
+        ));
+
+        // A vendor-namespaced `error-info` is not the NETCONF one either; it is
+        // kept as an extra element rather than rejected.
+        let xml = r#"<rpc-reply xmlns:v="urn:vendor" message-id="1"><rpc-error>
               <error-type>application</error-type>
               <error-tag>operation-failed</error-tag>
               <error-severity>error</error-severity>
               <v:error-info><v:detail/></v:error-info>
-            </rpc-error></rpc-reply>"#,
-        ];
-        for xml in cases {
-            assert!(matches!(
-                parse_strict(xml, "1"),
-                Err(RpcError::ParseError(_))
-            ));
-        }
+            </rpc-error></rpc-reply>"#;
+        let Err(RpcError::ServerError(server)) = parse_strict(xml, "1") else {
+            panic!("expected ServerError");
+        };
+        assert!(server.info.expect("info").contains("<v:error-info"));
     }
 
     #[test]
@@ -3133,5 +3173,109 @@ mod tests {
             "urn:literal space end"
         );
         validate_xml_fragment(&data).expect("captured namespace scope stays well formed");
+    }
+
+    const EXTRA_NS: &str = r#"xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns:junos="http://xml.juniper.net/junos/26.2R1.7/junos""#;
+
+    fn extra_warning(reply_body: &str) -> RpcErrorInfo {
+        let xml = format!(r#"<rpc-reply {EXTRA_NS} message-id="1">{reply_body}<ok/></rpc-reply>"#);
+        let RpcReply::OkWithWarnings(mut warnings) =
+            parse_strict(&xml, "1").expect("warning plus ok succeeds")
+        else {
+            panic!("expected OkWithWarnings");
+        };
+        warnings.remove(0)
+    }
+
+    #[test]
+    fn keeps_source_daemon_inside_rpc_error() {
+        let warning = extra_warning(
+            "<rpc-error>\n<error-severity>warning</error-severity>\n<source-daemon>\nmgd\n</source-daemon>\n\
+             <error-path>\n[edit security idp]\n</error-path>\n<error-info>\n<bad-element>\nx\n</bad-element>\n</error-info>\n\
+             <error-message>\nrequires license\n</error-message>\n</rpc-error>\n",
+        );
+        assert_eq!(warning.severity, Some(ErrorSeverity::Warning));
+        assert!(warning.message.contains("requires license"));
+        assert!(warning
+            .path
+            .as_deref()
+            .unwrap()
+            .contains("[edit security idp]"));
+        let info = warning.info.as_deref().expect("info");
+        let daemon = info.find("<source-daemon").expect("extra element kept");
+        let bad = info.find("<bad-element").expect("error-info kept");
+        assert!(daemon < bad, "document order: {info}");
+        validate_xml_fragment(info).expect("well formed");
+    }
+
+    #[test]
+    fn keeps_database_status_information_on_refused_lock() {
+        let xml = format!(
+            r#"<rpc-reply {EXTRA_NS} message-id="1"><rpc-error>
+<error-type>protocol</error-type><error-tag>operation-failed</error-tag>
+<error-severity>error</error-severity>
+<error-message>configuration database modified</error-message>
+<database-status-information><database-status><pid>12345</pid><user>admin</user>
+<start-time junos:seconds="1794272793">2026-11-10 01:06:33 UTC</start-time>
+</database-status></database-status-information></rpc-error></rpc-reply>"#
+        );
+        let Err(RpcError::ServerError(server)) = parse_strict(&xml, "1") else {
+            panic!("expected ServerError");
+        };
+        let RpcServerError {
+            tag,
+            severity,
+            message,
+            info,
+            ..
+        } = *server;
+        assert_eq!(tag, ErrorTag::OperationFailed);
+        assert_eq!(severity, Some(ErrorSeverity::Error));
+        assert_eq!(message, "configuration database modified");
+        let info = info.expect("info");
+        assert!(info.contains("<database-status-information"));
+        assert!(info.contains("<user>admin</user>"));
+        assert!(info.contains("junos:seconds=\"1794272793\""));
+        validate_xml_fragment(&info).expect("well formed");
+    }
+
+    #[test]
+    fn keeps_extra_elements_in_rfc_mode_with_prefixes() {
+        let xml = r#"<nc:rpc-reply xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns:junos="http://xml.juniper.net/junos/26.2R1.7/junos" message-id="1">
+<nc:rpc-error><nc:error-severity>warning</nc:error-severity>
+<source-daemon>mgd</source-daemon>
+<junos:daemon-note a="b"><x>y</x></junos:daemon-note>
+<nc:error-message>m</nc:error-message></nc:rpc-error><nc:ok/></nc:rpc-reply>"#;
+        let RpcReply::OkWithWarnings(warnings) = parse_strict(xml, "1").expect("parses") else {
+            panic!("expected OkWithWarnings");
+        };
+        let info = warnings[0].info.as_deref().expect("info");
+        assert_eq!(warnings[0].message, "m");
+        assert!(info.contains("<source-daemon") && info.contains("mgd</source-daemon>"));
+        assert!(info.contains("daemon-note"));
+        assert!(info.contains("<x>y</x>"));
+        validate_xml_fragment(info).expect("well formed");
+    }
+
+    #[test]
+    fn keeps_empty_extra_element() {
+        let warning = extra_warning(
+            "<rpc-error><error-severity>warning</error-severity><source-daemon/><error-message>m</error-message></rpc-error>",
+        );
+        let info = warning.info.as_deref().expect("info");
+        assert!(info.starts_with("<source-daemon") && info.ends_with("/>"));
+        validate_xml_fragment(info).expect("well formed");
+    }
+
+    #[test]
+    fn extra_elements_keep_other_strictness() {
+        for body in [
+            "<rpc-error><error-severity>warning</error-severity><error-severity>error</error-severity></rpc-error>",
+            "<rpc-error><error-severity>warning<source-daemon/></error-severity></rpc-error>",
+            "<rpc-error><error-severity>warning</error-severity><error-info/><error-info/></rpc-error>",
+        ] {
+            let xml = format!(r#"<rpc-reply {EXTRA_NS} message-id="1">{body}</rpc-reply>"#);
+            assert!(parse_strict(&xml, "1").is_err(), "{body}");
+        }
     }
 }
