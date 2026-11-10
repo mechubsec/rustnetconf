@@ -1,0 +1,1 @@
+<rpc-reply xmlns:junos="urn:x" message-id="1"><rpc-error><error-severity>warning</error-severity><source-daemon>mgd</source-daemon><error-info><bad-element>x</bad-element></error-info><error-message>m</error-message></rpc-error><ok/></rpc-reply>

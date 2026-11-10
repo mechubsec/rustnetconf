@@ -213,3 +213,26 @@ fn public_parser_rejects_non_xml_document_whitespace_and_qualified_pi_targets() 
         assert!(message.len() < 128, "{path}: diagnostic is unbounded");
     }
 }
+
+#[test]
+fn public_refused_lock_keeps_extra_rpc_error_elements() {
+    let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="7">
+      <rpc-error>
+        <error-type>protocol</error-type>
+        <error-tag>operation-failed</error-tag>
+        <error-severity>error</error-severity>
+        <error-message>configuration database modified</error-message>
+        <database-status-information>
+          <database-status><user>admin</user></database-status>
+        </database-status-information>
+      </rpc-error>
+    </rpc-reply>"#;
+
+    let Err(RpcError::ServerError(server)) = parse_rpc_reply(xml, "7") else {
+        panic!("expected ServerError");
+    };
+    assert_eq!(server.tag, ErrorTag::OperationFailed);
+    let info = server.info.expect("extra element kept in info");
+    assert!(info.contains("<database-status-information"));
+    assert!(info.contains("<user>admin</user>"));
+}

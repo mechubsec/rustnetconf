@@ -1,0 +1,1 @@
+<rpc-reply message-id="1"><rpc-error><error-type>protocol</error-type><error-tag>operation-failed</error-tag><error-severity>error</error-severity><database-status-information><database-status><user>admin</user></database-status></database-status-information><x/></rpc-error></rpc-reply>
