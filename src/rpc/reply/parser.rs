@@ -1543,7 +1543,10 @@ mod tests {
         let Err(RpcError::ServerError(server)) = parse_strict(xml, "1") else {
             panic!("expected ServerError");
         };
-        assert!(server.info.expect("info").contains("<v:error-info"));
+        assert_eq!(
+            server.info.as_deref(),
+            Some(r#"<v:error-info xmlns:v="urn:vendor"><v:detail/></v:error-info>"#)
+        );
     }
 
     #[test]
@@ -3255,6 +3258,20 @@ mod tests {
         assert!(info.contains("daemon-note"));
         assert!(info.contains("<x>y</x>"));
         validate_xml_fragment(info).expect("well formed");
+    }
+
+    #[test]
+    fn keeps_extra_element_after_error_info() {
+        let warning = extra_warning(
+            "<rpc-error><error-severity>warning</error-severity><error-info><a>1</a></error-info><source-daemon>mgd</source-daemon><error-message>m</error-message></rpc-error>",
+        );
+        assert_eq!(
+            warning.info.as_deref(),
+            Some(concat!(
+                r#"<a xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns:junos="http://xml.juniper.net/junos/26.2R1.7/junos">1</a>"#,
+                r#"<source-daemon xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns:junos="http://xml.juniper.net/junos/26.2R1.7/junos">mgd</source-daemon>"#
+            ))
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@ Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See 
 
 Any element directly inside `<rpc-error>` other than the six RFC 6241 fields and `<error-info>` failed the whole reply with `RpcError::ParseError`, so the caller never saw the device's actual error or warning. Junos sends such elements in two cases: a flat `<source-daemon>` on every warning and error in non-RFC mode (issue #147), and a nested `<database-status-information>` when a lock is refused because a CLI user has uncommitted edits.
 
-These elements are now kept, in any namespace, with nesting, attributes and namespace declarations. They are appended to `info` in document order, after or between any `<error-info>` content. A warning plus `<ok/>` parses as success with the warning; a refused lock gives `RpcError::ServerError` with the fragment in `info`. Duplicate fields, nested text fields and the other strict checks are unchanged.
+These elements are now kept, in any namespace, with nesting, attributes and namespace declarations. They are appended to `info` in document order. They sit before or after the whole `<error-info>` content, never inside it. A warning plus `<ok/>` parses as success with the warning; a refused lock gives `RpcError::ServerError` with the fragment in `info`. Duplicate fields, nested text fields and the other strict checks are unchanged.
 
 No API change.
 
