@@ -206,6 +206,8 @@ impl ReplyParser<'_> {
             && self.in_open_direct_payload()
             && protocol_name == Some("rpc-error")
         {
+            // An element inside the payload, so it is no longer text-only output.
+            self.direct_root_is_text_output = false;
             self.current_error = Some(ErrorState::default());
             return Ok(());
         }

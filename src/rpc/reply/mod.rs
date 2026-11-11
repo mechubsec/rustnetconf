@@ -548,6 +548,25 @@ mod tests {
     }
 
     #[test]
+    fn output_holding_a_warning_with_ok_still_conflicts() {
+        // An <rpc-error> inside <output> is an element too: the output is not
+        // text-only, so <ok/> must not discard it.
+        let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="18">
+<output>Hint: something<rpc-error>
+<error-type>application</error-type>
+<error-tag>operation-failed</error-tag>
+<error-severity>warning</error-severity>
+<error-message>a warning</error-message>
+</rpc-error></output>
+<ok/>
+</rpc-reply>"#;
+        assert!(matches!(
+            parse_rpc_reply(xml, "18"),
+            Err(RpcError::ParseError(_))
+        ));
+    }
+
+    #[test]
     fn duplicate_ok_after_output_still_conflicts() {
         let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="16">
 <output>Hint: something</output>
