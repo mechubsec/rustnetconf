@@ -2,6 +2,16 @@
 
 Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See the [README](README.md) for current usage.
 
+## What's New in v0.19.3
+
+**Fix: a Junos OS Evolved commit reply with an `<output>` hint beside `<ok/>` now parses as success.**
+
+An SRX440 running Junos OS Evolved 25.4X300-D10.2-EVO answers a confirmed commit that changes the host name with an informational `<output>` line from its hostname tool ("Hint: static hostname is already set, …") and a sibling `<ok/>`. RFC 6241 does not allow both, and the parser accepted the pair only for `<commit-results>`, so the reply failed with `RpcError::ParseError` ("<ok/> conflicts with an existing payload") and the caller could not tell that the commit had landed.
+
+A lone `<output>` holding only text, followed by exactly one `<ok/>`, now parses as `RpcReply::Ok`, the same way `<commit-results>` does. An `<output>` holding elements, a second direct root, a second `<ok/>`, and any `<rpc-error>` keep their current results.
+
+No API change.
+
 ## What's New in v0.19.2
 
 **Fix: the reply parser no longer rejects the extra elements Junos puts inside `<rpc-error>`.**

@@ -511,6 +511,95 @@ mod tests {
     }
 
     #[test]
+    fn parses_evo_commit_with_an_output_hint_and_ok_sibling() {
+        // Captured off the wire from an SRX440 running Junos OS Evolved
+        // 25.4X300-D10.2-EVO, answering a confirmed commit that changed the
+        // host name. Its hostname tool prints an informational <output> line,
+        // and <ok/> follows it as a sibling. The <ok/> carries the verdict.
+        let xml = include_str!("../../../tests/fixtures/commit_check/evo_commit_hostname_hint.xml");
+        assert!(matches!(parse_rpc_reply(xml, "13"), Ok(RpcReply::Ok)));
+    }
+
+    #[test]
+    fn output_holding_elements_with_ok_still_conflicts() {
+        // Only a text-only <output> is tolerated: structured content beside
+        // <ok/> would be a response body the caller asked for.
+        let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="14">
+<output><software-information><host-name>srx440</host-name></software-information></output>
+<ok/>
+</rpc-reply>"#;
+        assert!(matches!(
+            parse_rpc_reply(xml, "14"),
+            Err(RpcError::ParseError(_))
+        ));
+    }
+
+    #[test]
+    fn output_plus_another_sibling_then_ok_still_conflicts() {
+        let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="15">
+<output>Hint: something</output>
+<software-information><host-name>srx440</host-name></software-information>
+<ok/>
+</rpc-reply>"#;
+        assert!(matches!(
+            parse_rpc_reply(xml, "15"),
+            Err(RpcError::ParseError(_))
+        ));
+    }
+
+    #[test]
+    fn output_holding_a_warning_with_ok_still_conflicts() {
+        // An <rpc-error> inside <output> is an element too: the output is not
+        // text-only, so <ok/> must not discard it.
+        let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="18">
+<output>Hint: something<rpc-error>
+<error-type>application</error-type>
+<error-tag>operation-failed</error-tag>
+<error-severity>warning</error-severity>
+<error-message>a warning</error-message>
+</rpc-error></output>
+<ok/>
+</rpc-reply>"#;
+        assert!(matches!(
+            parse_rpc_reply(xml, "18"),
+            Err(RpcError::ParseError(_))
+        ));
+    }
+
+    #[test]
+    fn duplicate_ok_after_output_still_conflicts() {
+        let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="16">
+<output>Hint: something</output>
+<ok/>
+<ok/>
+</rpc-reply>"#;
+        assert!(matches!(
+            parse_rpc_reply(xml, "16"),
+            Err(RpcError::ParseError(_))
+        ));
+    }
+
+    #[test]
+    fn ok_sibling_after_output_does_not_mask_a_device_error() {
+        let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="17">
+<output>Hint: something</output>
+<rpc-error>
+<error-type>protocol</error-type>
+<error-tag>operation-failed</error-tag>
+<error-severity>error</error-severity>
+<error-message>configuration check-out failed</error-message>
+</rpc-error>
+<ok/>
+</rpc-reply>"#;
+        match parse_rpc_reply(xml, "17") {
+            Err(RpcError::ServerError(server_error)) => {
+                assert_eq!(server_error.message, "configuration check-out failed");
+            }
+            other => panic!("expected ServerError, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn ok_sibling_does_not_mask_a_device_error() {
         // A hard rpc-error must still win over the tolerated <ok/> sibling,
         // so a failed check is never reported as a passing one.

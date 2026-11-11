@@ -17,8 +17,11 @@ is given, and `fuzz/seeds/` is tracked, so naming it first would fill the repo
 with generated hash files:
 
 ```bash
+mkdir -p fuzz/corpus/fragment_embeds_cleanly fuzz/corpus/reply_parser_is_total
 cargo +nightly fuzz run fragment_embeds_cleanly \
   fuzz/corpus/fragment_embeds_cleanly fuzz/seeds/fragment_embeds_cleanly
+cargo +nightly fuzz run reply_parser_is_total \
+  fuzz/corpus/reply_parser_is_total fuzz/seeds/reply_parser_is_total
 ```
 
 ## Oracle

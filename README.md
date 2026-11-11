@@ -1,4 +1,4 @@
-<!-- mechub-version: v0.19.2 -->
+<!-- mechub-version: v0.19.3 -->
 
 <p align="center">
   <picture>
@@ -26,9 +26,9 @@ Async NETCONF client library, YANG code generation, vendor profiles, connection 
 
 Built on [tokio](https://tokio.rs), [russh](https://crates.io/crates/russh), and [rustls](https://crates.io/crates/rustls) — pure Rust, no OpenSSL, no libssh2.
 
-> **Latest release — [v0.19.2](https://github.com/mechubsec/rustnetconf/releases/tag/v0.19.2)** (2026-11-10): Junos replies with extra elements inside `<rpc-error>` (`source-daemon` with rfc-compliant off, `database-status-information` on a refused lock) now parse instead of failing (#147). No API change.
-> On crates.io: `rustnetconf` 0.19.2 · `rustnetconf-cli` 0.5.3 · `rustnetconf-yang` 0.6.0.
-> See [CHANGELOG.md](CHANGELOG.md#whats-new-in-v0192) for release notes.
+> **Latest release — [v0.19.3](https://github.com/mechubsec/rustnetconf/releases/tag/v0.19.3)** (2026-11-11): a Junos OS Evolved commit reply with a text-only `<output>` hint beside `<ok/>` (an SRX440 changing its host name) now parses as success instead of failing. No API change.
+> On crates.io: `rustnetconf` 0.19.3 · `rustnetconf-cli` 0.5.3 · `rustnetconf-yang` 0.6.0.
+> See [CHANGELOG.md](CHANGELOG.md#whats-new-in-v0193) for release notes.
 
 ## Install
 
