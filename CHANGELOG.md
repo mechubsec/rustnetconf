@@ -2,6 +2,12 @@
 
 Release notes for `rustnetconf`, `rustnetconf-cli`, and `rustnetconf-yang`. See the [README](README.md) for current usage.
 
+## `rustnetconf-cli` 0.5.4
+
+**Requires `rustnetconf` 0.19.3 and ships its lockfile.** 0.5.3's packaged lockfile still pinned `rustnetconf` 0.19.1, so `cargo install --locked rustnetconf-cli` missed the two reply-parser fixes since: Junos's extra elements inside `<rpc-error>` (0.19.2), and the Junos OS Evolved `<output>` hint beside `<ok/>` on commit (0.19.3). Without them, any warning or error from a Junos device in non-RFC mode, and a commit that changes the host name on an SRX440 running Junos OS Evolved, failed with `RpcError::ParseError`.
+
+No code change of its own.
+
 ## What's New in v0.19.3
 
 **Fix: a Junos OS Evolved commit reply with an `<output>` hint beside `<ok/>` now parses as success.**
