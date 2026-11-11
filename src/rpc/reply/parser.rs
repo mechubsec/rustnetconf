@@ -115,6 +115,9 @@ struct ReplyParser<'a> {
     /// Whether the direct payload's root element is Junos `<commit-results>`,
     /// the one shape allowed to be followed by a sibling `<ok/>`.
     direct_root_is_commit_results: bool,
+    /// Whether the direct payload is a lone `<output>` holding only text:
+    /// Junos OS Evolved sends one beside `<ok/>` when a commit prints a hint.
+    direct_root_is_text_output: bool,
     current_error: Option<ErrorState>,
     errors: Vec<RpcErrorInfo>,
     deferred_payload_error: Option<&'static str>,
@@ -132,6 +135,7 @@ impl<'a> ReplyParser<'a> {
             payload: PayloadState::None,
             protocol_ok: false,
             direct_root_is_commit_results: false,
+            direct_root_is_text_output: false,
             current_error: None,
             errors: Vec::new(),
             deferred_payload_error: None,
@@ -350,6 +354,12 @@ impl ReplyParser<'_> {
         self.netconf_local_name(qualified_name.as_ref()) == Some("commit-results")
     }
 
+    /// Whether `tag` is Junos `<output>`, in either the NETCONF namespace or none.
+    fn is_output(&self, tag: &BytesStart<'_>) -> bool {
+        let qualified_name = tag.name();
+        self.netconf_local_name(qualified_name.as_ref()) == Some("output")
+    }
+
     fn in_open_direct_payload(&self) -> bool {
         matches!(
             self.payload,
@@ -383,6 +393,7 @@ impl ReplyParser<'_> {
             PayloadState::Direct { capture, depth } if *depth > 0 => {
                 capture.start(tag)?;
                 *depth += 1;
+                self.direct_root_is_text_output = false;
                 Ok(true)
             }
             _ => Ok(false),
@@ -422,6 +433,7 @@ impl ReplyParser<'_> {
             }
             PayloadState::Direct { capture, depth } if *depth > 0 => {
                 capture.empty(tag)?;
+                self.direct_root_is_text_output = false;
                 Ok(true)
             }
             _ => Ok(false),
@@ -528,6 +540,7 @@ impl ReplyParser<'_> {
     fn open_direct(&mut self, tag: &BytesStart<'_>) -> Result<(), RpcError> {
         let parent_namespaces = self.parent_namespaces();
         let is_commit_results = self.is_commit_results(tag);
+        let is_output = self.is_output(tag);
         if self.protocol_ok {
             self.defer_payload_conflict("direct payload conflicts with an existing payload");
             self.ignored_payload = Some(IgnoredPayload::Direct { depth: 1 });
@@ -539,6 +552,7 @@ impl ReplyParser<'_> {
                 capture.start(tag)?;
                 self.payload = PayloadState::Direct { capture, depth: 1 };
                 self.direct_root_is_commit_results = is_commit_results;
+                self.direct_root_is_text_output = is_output;
                 Ok(())
             }
             PayloadState::Direct { capture, depth } if *depth == 0 => {
@@ -548,6 +562,7 @@ impl ReplyParser<'_> {
                 capture.start(tag)?;
                 *depth = 1;
                 self.direct_root_is_commit_results = false;
+                self.direct_root_is_text_output = false;
                 Ok(())
             }
             _ => {
@@ -561,6 +576,7 @@ impl ReplyParser<'_> {
     fn capture_direct_empty(&mut self, tag: &BytesStart<'_>) -> Result<(), RpcError> {
         let parent_namespaces = self.parent_namespaces();
         let is_commit_results = self.is_commit_results(tag);
+        let is_output = self.is_output(tag);
         if self.protocol_ok {
             self.defer_payload_conflict("direct payload conflicts with an existing payload");
             return Ok(());
@@ -571,12 +587,14 @@ impl ReplyParser<'_> {
                 capture.empty(tag)?;
                 self.payload = PayloadState::Direct { capture, depth: 0 };
                 self.direct_root_is_commit_results = is_commit_results;
+                self.direct_root_is_text_output = is_output;
                 Ok(())
             }
             PayloadState::Direct { capture, depth } if *depth == 0 => {
                 // See open_direct: a second direct root ends the exception.
                 capture.empty(tag)?;
                 self.direct_root_is_commit_results = false;
+                self.direct_root_is_text_output = false;
                 Ok(())
             }
             _ => {
@@ -691,14 +709,17 @@ impl ReplyParser<'_> {
             // already tolerates it through `in_open_direct_payload`. A
             // standalone device closes it correctly and reaches here instead;
             // the well-formed reply must not fare worse than the malformed
-            // one. The `<ok/>` carries the verdict, so record it.
+            // one. The `<ok/>` carries the verdict, so record it. Junos OS
+            // Evolved does the same with a lone, text-only `<output>` hint
+            // (an SRX440 changing its host name).
             //
             // Scoped to exactly one `<ok/>` after a closed `<commit-results>`.
             // Any other direct payload keeps the conflict: resolving to `Ok`
             // would hand the caller an empty string and silently drop a
             // response body it asked for.
             PayloadState::Direct { depth: 0, .. }
-                if self.direct_root_is_commit_results && !self.protocol_ok =>
+                if (self.direct_root_is_commit_results || self.direct_root_is_text_output)
+                    && !self.protocol_ok =>
             {
                 self.protocol_ok = true;
                 Ok(())

@@ -1,0 +1,6 @@
+<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns:junos="http://xml.juniper.net/junos/25.4X300-D10.2-EVO/junos" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="13">
+<output>
+Hint: static hostname is already set, so the specified transient hostname will not be used.
+</output>
+<ok/>
+</rpc-reply>
