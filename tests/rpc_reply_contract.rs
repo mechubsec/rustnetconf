@@ -236,3 +236,16 @@ fn public_refused_lock_keeps_extra_rpc_error_elements() {
     assert!(info.contains("<database-status-information"));
     assert!(info.contains("<user>admin</user>"));
 }
+
+#[test]
+fn public_evo_commit_hint_beside_ok_is_success() {
+    // Junos OS Evolved on an SRX440, answering a confirmed host-name commit.
+    let xml = r#"<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="13">
+<output>
+Hint: static hostname is already set, so the specified transient hostname will not be used.
+</output>
+<ok/>
+</rpc-reply>"#;
+
+    assert!(matches!(parse_rpc_reply(xml, "13"), Ok(RpcReply::Ok)));
+}
